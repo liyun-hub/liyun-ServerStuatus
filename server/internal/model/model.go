@@ -36,8 +36,9 @@ type MetricsSnapshot struct {
 
 type NodeSummary struct {
 	Node
-	Latest *MetricsSnapshot `json:"latest"`
-	Online bool             `json:"online"`
+	DisplayName string           `json:"displayName"`
+	Latest      *MetricsSnapshot `json:"latest"`
+	Online      bool             `json:"online"`
 }
 
 type AlertRule struct {

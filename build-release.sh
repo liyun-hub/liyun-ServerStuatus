@@ -41,7 +41,9 @@ cat > "$PKG_DIR/server.env" <<'EOF'
 HTTP_ADDR=:8080
 DB_PATH=./data/server-status.db
 HEARTBEAT_TIMEOUT_SEC=30
-AGENT_TOKEN=replace-with-strong-token
+ADMIN_SESSION_TTL_SEC=86400
+INSTALL_AGENT_IMAGE=ghcr.io/liyun/server-status-agent:latest
+INSTALL_WS_URL=
 EOF
 
 cat > "$PKG_DIR/agent.env" <<'EOF'
@@ -50,7 +52,7 @@ NODE_ID=agent-linux-1
 HEARTBEAT_INTERVAL_SEC=5
 COLLECT_INTERVAL_SEC=5
 RECONNECT_WAIT_SEC=3
-AGENT_TOKEN=replace-with-strong-token
+AGENT_TOKEN=replace-with-node-token
 EOF
 
 chmod +x "$PKG_DIR/deploy.sh"

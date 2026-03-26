@@ -51,7 +51,7 @@ export default function NodesPage() {
           {nodes.map((node) => (
             <tr key={node.id} style={{ borderTop: "1px solid #ddd" }}>
               <td>
-                <div>{node.hostname}</div>
+                <div>{node.displayName}</div>
                 <small>{node.id}</small>
               </td>
               <td>{node.online ? "在线" : "离线"}</td>

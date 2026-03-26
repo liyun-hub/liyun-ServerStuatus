@@ -16,9 +16,6 @@ import (
 
 func main() {
 	cfg := config.Load()
-	if cfg.AgentToken == "" {
-		log.Fatal("AGENT_TOKEN is required")
-	}
 	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
 		log.Fatalf("create db dir failed: %v", err)
 	}
@@ -30,10 +27,10 @@ func main() {
 	defer store.Close()
 
 	alertEngine := alert.NewEngine(store)
-	hub := ws.NewHub(store, alertEngine, cfg.HeartbeatTimeout, cfg.AgentToken)
+	hub := ws.NewHub(store, alertEngine, cfg.HeartbeatTimeout)
 
 	mux := http.NewServeMux()
-	handler.RegisterRoutes(mux, store, cfg.HeartbeatTimeout)
+	handler.RegisterRoutes(mux, store, cfg)
 	mux.HandleFunc("GET /ws/agent", hub.ServeAgentWS)
 
 	server := &http.Server{

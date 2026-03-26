@@ -3,6 +3,8 @@ import NodesPage from "./pages/Nodes";
 import NodeDetailPage from "./pages/NodeDetail";
 import AlertRulesPage from "./pages/AlertRules";
 import AlertEventsPage from "./pages/AlertEvents";
+import AdminLoginPage from "./pages/AdminLogin";
+import AdminNodesPage from "./pages/AdminNodes";
 
 const navStyle = ({ isActive }: { isActive: boolean }) => ({
   marginRight: 12,
@@ -25,6 +27,9 @@ export default function App() {
         <NavLink to="/alert-events" style={navStyle}>
           告警事件
         </NavLink>
+        <NavLink to="/admin/nodes" style={navStyle}>
+          后台管理
+        </NavLink>
       </nav>
 
       <Routes>
@@ -32,6 +37,8 @@ export default function App() {
         <Route path="/nodes/:id" element={<NodeDetailPage />} />
         <Route path="/alert-rules" element={<AlertRulesPage />} />
         <Route path="/alert-events" element={<AlertEventsPage />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/admin/nodes" element={<AdminNodesPage />} />
       </Routes>
     </div>
   );

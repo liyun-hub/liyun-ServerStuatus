@@ -112,6 +112,27 @@ func (s *Store) init() error {
 			message TEXT NOT NULL,
 			created_at INTEGER NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS node_metadata (
+			node_id TEXT PRIMARY KEY,
+			display_name TEXT NOT NULL,
+			token_hash TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			FOREIGN KEY(node_id) REFERENCES nodes(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS admin_users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS admin_sessions (
+			token_hash TEXT PRIMARY KEY,
+			username TEXT NOT NULL,
+			expires_at INTEGER NOT NULL,
+			created_at INTEGER NOT NULL
+		);`,
 	}
 
 	for _, stmt := range schema {
@@ -123,7 +144,33 @@ func (s *Store) init() error {
 	if _, err := s.db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
 		return err
 	}
+
+	if err := s.seedDefaultAdmin(); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (s *Store) seedDefaultAdmin() error {
+	const username = "admin"
+	const passwordHash = "$2a$12$fcwmQbC2MNNRLrA2boPbeuF7dIu2MxxL8Yf/v5Rs9B3Ayygf/5cbW"
+
+	row := s.db.QueryRow(`SELECT COUNT(1) FROM admin_users`)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	now := time.Now().Unix()
+	_, err := s.db.Exec(`
+		INSERT INTO admin_users (username, password_hash, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, username, passwordHash, now, now)
+	return err
 }
 
 func (s *Store) UpsertNode(node model.Node) error {
@@ -161,14 +208,34 @@ func (s *Store) UpsertNode(node model.Node) error {
 	return err
 }
 
+func (s *Store) EnsureNode(nodeID string) error {
+	now := time.Now().Unix()
+	_, err := s.db.Exec(`
+		INSERT INTO nodes (
+			id, hostname, os, platform, platform_version, kernel, arch, cpu_model, cpu_cores,
+			total_memory, total_disk, ip, created_at, updated_at, last_seen_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO NOTHING
+	`,
+		nodeID, nodeID, "unknown", "unknown", "", "", "", "", 0,
+		0, 0, "", now, now, 0,
+	)
+	return err
+}
+
 func (s *Store) TouchNode(nodeID string, at int64) error {
+	if nodeID == "" {
+		return fmt.Errorf("node id is required")
+	}
 	if at == 0 {
 		at = time.Now().Unix()
+	}
+	if err := s.EnsureNode(nodeID); err != nil {
+		return err
 	}
 	_, err := s.db.Exec(`UPDATE nodes SET last_seen_at=?, updated_at=? WHERE id=?`, at, at, nodeID)
 	return err
 }
-
 func (s *Store) ListNodes() ([]model.Node, error) {
 	rows, err := s.db.Query(`
 		SELECT id, hostname, os, platform, platform_version, kernel, arch, cpu_model, cpu_cores,
@@ -465,6 +532,303 @@ func (s *Store) ListAlertEvents(limit int) ([]model.AlertEvent, error) {
 		result = append(result, e)
 	}
 	return result, rows.Err()
+}
+
+type NodeMetadata struct {
+	NodeID      string
+	DisplayName string
+	TokenHash   string
+	CreatedAt   int64
+	UpdatedAt   int64
+}
+
+func (s *Store) UpsertNodeMetadata(nodeID, displayName, tokenHash string) error {
+	now := time.Now().Unix()
+	if displayName == "" {
+		displayName = nodeID
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO node_metadata (node_id, display_name, token_hash, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(node_id) DO UPDATE SET
+			display_name=excluded.display_name,
+			token_hash=excluded.token_hash,
+			updated_at=excluded.updated_at
+	`, nodeID, displayName, tokenHash, now, now)
+	return err
+}
+
+func (s *Store) UpdateNodeDisplayName(nodeID, displayName string) error {
+	if nodeID == "" {
+		return fmt.Errorf("node id is required")
+	}
+	if displayName == "" {
+		return fmt.Errorf("display name is required")
+	}
+	now := time.Now().Unix()
+	result, err := s.db.Exec(`
+		UPDATE node_metadata
+		SET display_name=?, updated_at=?
+		WHERE node_id=?
+	`, displayName, now, nodeID)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) GetNodeMetadata(nodeID string) (*NodeMetadata, error) {
+	row := s.db.QueryRow(`
+		SELECT node_id, display_name, token_hash, created_at, updated_at
+		FROM node_metadata
+		WHERE node_id=?
+	`, nodeID)
+	var m NodeMetadata
+	if err := row.Scan(&m.NodeID, &m.DisplayName, &m.TokenHash, &m.CreatedAt, &m.UpdatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &m, nil
+}
+
+func (s *Store) ListNodeMetadata() (map[string]NodeMetadata, error) {
+	rows, err := s.db.Query(`
+		SELECT node_id, display_name, token_hash, created_at, updated_at
+		FROM node_metadata
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]NodeMetadata)
+	for rows.Next() {
+		var m NodeMetadata
+		if err := rows.Scan(&m.NodeID, &m.DisplayName, &m.TokenHash, &m.CreatedAt, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result[m.NodeID] = m
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) FindNodeIDByTokenHash(tokenHash string) (string, error) {
+	row := s.db.QueryRow(`SELECT node_id FROM node_metadata WHERE token_hash=?`, tokenHash)
+	var nodeID string
+	if err := row.Scan(&nodeID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return nodeID, nil
+}
+
+func (s *Store) CreateNodeWithToken(nodeID, displayName, tokenHash string) error {
+	if nodeID == "" {
+		return fmt.Errorf("node id is required")
+	}
+	if tokenHash == "" {
+		return fmt.Errorf("token hash is required")
+	}
+	if displayName == "" {
+		displayName = nodeID
+	}
+	if err := s.EnsureNode(nodeID); err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	_, err := s.db.Exec(`
+		INSERT INTO node_metadata (node_id, display_name, token_hash, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, nodeID, displayName, tokenHash, now, now)
+	return err
+}
+
+func (s *Store) UpdateNodeTokenHash(nodeID, tokenHash string) error {
+	if nodeID == "" {
+		return fmt.Errorf("node id is required")
+	}
+	if tokenHash == "" {
+		return fmt.Errorf("token hash is required")
+	}
+	if err := s.EnsureNode(nodeID); err != nil {
+		return err
+	}
+	metadata, err := s.GetNodeMetadata(nodeID)
+	if err != nil {
+		return err
+	}
+	if metadata == nil {
+		now := time.Now().Unix()
+		_, err := s.db.Exec(`
+			INSERT INTO node_metadata (node_id, display_name, token_hash, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, nodeID, nodeID, tokenHash, now, now)
+		return err
+	}
+	now := time.Now().Unix()
+	_, err = s.db.Exec(`
+		UPDATE node_metadata SET token_hash=?, updated_at=? WHERE node_id=?
+	`, tokenHash, now, nodeID)
+	return err
+}
+
+func (s *Store) ListNodeSummaries() ([]model.NodeSummary, error) {
+	rows, err := s.db.Query(`
+		SELECT
+			n.id, n.hostname, n.os, n.platform, n.platform_version, n.kernel, n.arch, n.cpu_model, n.cpu_cores,
+			n.total_memory, n.total_disk, n.ip, n.created_at, n.updated_at, n.last_seen_at,
+			COALESCE(m.display_name, n.id) AS display_name,
+			l.node_id, COALESCE(l.cpu_usage, 0), COALESCE(l.memory_used, 0), COALESCE(l.memory_total, 0), COALESCE(l.memory_usage, 0),
+			COALESCE(l.disk_used, 0), COALESCE(l.disk_total, 0), COALESCE(l.disk_usage, 0),
+			COALESCE(l.net_rx_rate, 0), COALESCE(l.net_tx_rate, 0), COALESCE(l.net_rx_total, 0), COALESCE(l.net_tx_total, 0), COALESCE(l.timestamp, 0)
+		FROM nodes n
+		LEFT JOIN node_metadata m ON m.node_id = n.id
+		LEFT JOIN metrics_latest l ON l.node_id = n.id
+		ORDER BY n.updated_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]model.NodeSummary, 0)
+	for rows.Next() {
+		var summary model.NodeSummary
+		var latestNodeID sql.NullString
+		var latest model.MetricsSnapshot
+		if err := rows.Scan(
+			&summary.ID, &summary.Hostname, &summary.OS, &summary.Platform, &summary.PlatformVersion, &summary.Kernel, &summary.Arch, &summary.CPUModel, &summary.CPUCores,
+			&summary.TotalMemory, &summary.TotalDisk, &summary.IP, &summary.CreatedAt, &summary.UpdatedAt, &summary.LastSeenAt,
+			&summary.DisplayName,
+			&latestNodeID, &latest.CPUUsage, &latest.MemoryUsed, &latest.MemoryTotal, &latest.MemoryUsage,
+			&latest.DiskUsed, &latest.DiskTotal, &latest.DiskUsage,
+			&latest.NetRXRate, &latest.NetTXRate, &latest.NetRXTotal, &latest.NetTXTotal, &latest.Timestamp,
+		); err != nil {
+			return nil, err
+		}
+		if latestNodeID.Valid {
+			latest.NodeID = latestNodeID.String
+			summary.Latest = &latest
+		}
+		result = append(result, summary)
+	}
+
+	return result, rows.Err()
+}
+
+func (s *Store) GetNodeSummary(nodeID string) (*model.NodeSummary, error) {
+	row := s.db.QueryRow(`
+		SELECT
+			n.id, n.hostname, n.os, n.platform, n.platform_version, n.kernel, n.arch, n.cpu_model, n.cpu_cores,
+			n.total_memory, n.total_disk, n.ip, n.created_at, n.updated_at, n.last_seen_at,
+			COALESCE(m.display_name, n.id) AS display_name,
+			l.node_id, COALESCE(l.cpu_usage, 0), COALESCE(l.memory_used, 0), COALESCE(l.memory_total, 0), COALESCE(l.memory_usage, 0),
+			COALESCE(l.disk_used, 0), COALESCE(l.disk_total, 0), COALESCE(l.disk_usage, 0),
+			COALESCE(l.net_rx_rate, 0), COALESCE(l.net_tx_rate, 0), COALESCE(l.net_rx_total, 0), COALESCE(l.net_tx_total, 0), COALESCE(l.timestamp, 0)
+		FROM nodes n
+		LEFT JOIN node_metadata m ON m.node_id = n.id
+		LEFT JOIN metrics_latest l ON l.node_id = n.id
+		WHERE n.id = ?
+	`, nodeID)
+
+	var summary model.NodeSummary
+	var latestNodeID sql.NullString
+	var latest model.MetricsSnapshot
+	if err := row.Scan(
+		&summary.ID, &summary.Hostname, &summary.OS, &summary.Platform, &summary.PlatformVersion, &summary.Kernel, &summary.Arch, &summary.CPUModel, &summary.CPUCores,
+		&summary.TotalMemory, &summary.TotalDisk, &summary.IP, &summary.CreatedAt, &summary.UpdatedAt, &summary.LastSeenAt,
+		&summary.DisplayName,
+		&latestNodeID, &latest.CPUUsage, &latest.MemoryUsed, &latest.MemoryTotal, &latest.MemoryUsage,
+		&latest.DiskUsed, &latest.DiskTotal, &latest.DiskUsage,
+		&latest.NetRXRate, &latest.NetTXRate, &latest.NetRXTotal, &latest.NetTXTotal, &latest.Timestamp,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if latestNodeID.Valid {
+		latest.NodeID = latestNodeID.String
+		summary.Latest = &latest
+	}
+	return &summary, nil
+}
+
+func (s *Store) ListNodeMetadataList() ([]NodeMetadata, error) {
+	rows, err := s.db.Query(`
+		SELECT node_id, display_name, token_hash, created_at, updated_at
+		FROM node_metadata
+		ORDER BY updated_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]NodeMetadata, 0)
+	for rows.Next() {
+		var m NodeMetadata
+		if err := rows.Scan(&m.NodeID, &m.DisplayName, &m.TokenHash, &m.CreatedAt, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) ValidateAdminPasswordHash(username string) (string, error) {
+	row := s.db.QueryRow(`SELECT password_hash FROM admin_users WHERE username=?`, username)
+	var hash string
+	if err := row.Scan(&hash); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return hash, nil
+}
+
+func (s *Store) UpsertAdminSession(tokenHash, username string, expiresAt int64) error {
+	now := time.Now().Unix()
+	_, err := s.db.Exec(`
+		INSERT INTO admin_sessions (token_hash, username, expires_at, created_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(token_hash) DO UPDATE SET
+			expires_at=excluded.expires_at
+	`, tokenHash, username, expiresAt, now)
+	return err
+}
+
+func (s *Store) GetAdminSession(tokenHash string) (string, int64, error) {
+	row := s.db.QueryRow(`SELECT username, expires_at FROM admin_sessions WHERE token_hash=?`, tokenHash)
+	var username string
+	var expiresAt int64
+	if err := row.Scan(&username, &expiresAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", 0, nil
+		}
+		return "", 0, err
+	}
+	return username, expiresAt, nil
+}
+
+func (s *Store) DeleteAdminSession(tokenHash string) error {
+	_, err := s.db.Exec(`DELETE FROM admin_sessions WHERE token_hash=?`, tokenHash)
+	return err
+}
+
+func (s *Store) DeleteExpiredAdminSessions(now int64) error {
+	_, err := s.db.Exec(`DELETE FROM admin_sessions WHERE expires_at<=?`, now)
+	return err
 }
 
 func boolToInt(v bool) int {

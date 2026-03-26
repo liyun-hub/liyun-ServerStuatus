@@ -35,23 +35,11 @@ ensure_files() {
   fi
 }
 
-get_token() {
-  env_file="$1"
-  grep '^AGENT_TOKEN=' "$env_file" 2>/dev/null | tail -n 1 | cut -d '=' -f 2-
-}
+check_agent_token() {
+  agent_token=$(grep '^AGENT_TOKEN=' "$AGENT_ENV" 2>/dev/null | tail -n 1 | cut -d '=' -f 2- || true)
 
-check_tokens() {
-  server_token=$(get_token "$SERVER_ENV" || true)
-  agent_token=$(get_token "$AGENT_ENV" || true)
-
-  if [ -z "$server_token" ] || [ -z "$agent_token" ]; then
-    echo "AGENT_TOKEN is empty in server.env or agent.env"
-    echo "please set the same non-empty AGENT_TOKEN in both files"
-    exit 1
-  fi
-
-  if [ "$server_token" != "$agent_token" ]; then
-    echo "AGENT_TOKEN mismatch between server.env and agent.env"
+  if [ -z "$agent_token" ]; then
+    echo "AGENT_TOKEN is empty in agent.env"
     exit 1
   fi
 }
@@ -137,7 +125,7 @@ status_proc() {
 
 start_all() {
   ensure_files
-  check_tokens
+  check_agent_token
   start_proc "server" "$SERVER_BIN" "$SERVER_ENV"
   start_proc "agent" "$AGENT_BIN" "$AGENT_ENV"
   status_all

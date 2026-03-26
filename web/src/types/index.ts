@@ -33,6 +33,7 @@ export type Node = {
 };
 
 export type NodeSummary = Node & {
+  displayName: string;
   latest?: MetricsSnapshot;
   online: boolean;
 };
@@ -58,4 +59,43 @@ export type AlertEvent = {
   value: number;
   message: string;
   createdAt: number;
+};
+
+export type AdminLoginResponse = {
+  token: string;
+  expiresAt: number;
+};
+
+export type AdminNodeItem = {
+  nodeId: string;
+  displayName: string;
+  online: boolean;
+  latest?: MetricsSnapshot;
+};
+
+export type CreateNodeRequest = {
+  nodeId: string;
+  displayName: string;
+};
+
+export type CreateNodeResponse = {
+  nodeId: string;
+  displayName: string;
+  token: string;
+};
+
+export type UpdateNodeDisplayNameRequest = {
+  displayName: string;
+};
+
+export type ResetNodeTokenResponse = {
+  nodeId: string;
+  token: string;
+};
+
+export type InstallCommandResponse = {
+  nodeId: string;
+  displayName: string;
+  token: string;
+  command: string;
 };

@@ -9,7 +9,9 @@ services:
       HTTP_ADDR: ":8080"
       DB_PATH: /app/data/server-status.db
       HEARTBEAT_TIMEOUT_SEC: "30"
-      AGENT_TOKEN: ${AGENT_TOKEN}
+      ADMIN_SESSION_TTL_SEC: ${ADMIN_SESSION_TTL_SEC:-86400}
+      INSTALL_AGENT_IMAGE: ${INSTALL_AGENT_IMAGE:-ghcr.io/liyun/server-status-agent:latest}
+      INSTALL_WS_URL: ${INSTALL_WS_URL:-}
     volumes:
       - server_data:/app/data
     ports:

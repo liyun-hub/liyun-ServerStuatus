@@ -1,6 +1,8 @@
 package ws
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -18,7 +20,6 @@ type Hub struct {
 	store            *sqlite.Store
 	alertEngine      *alert.Engine
 	heartbeatTimeout time.Duration
-	agentToken       string
 	upgrader         websocket.Upgrader
 }
 
@@ -63,12 +64,11 @@ type metricsPayload struct {
 	Timestamp   int64   `json:"timestamp"`
 }
 
-func NewHub(store *sqlite.Store, alertEngine *alert.Engine, timeout time.Duration, agentToken string) *Hub {
+func NewHub(store *sqlite.Store, alertEngine *alert.Engine, timeout time.Duration) *Hub {
 	return &Hub{
 		store:            store,
 		alertEngine:      alertEngine,
 		heartbeatTimeout: timeout,
-		agentToken:       agentToken,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
@@ -76,7 +76,8 @@ func NewHub(store *sqlite.Store, alertEngine *alert.Engine, timeout time.Duratio
 }
 
 func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
-	if !h.authorized(r) {
+	authorizedNodeID, ok := h.authorized(r)
+	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
@@ -94,7 +95,7 @@ func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
 		return conn.SetReadDeadline(time.Now().Add(h.heartbeatTimeout * 2))
 	})
 
-	currentNodeID := ""
+	currentNodeID := authorizedNodeID
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(h.heartbeatTimeout * 2))
 		var msg incomingMessage
@@ -109,9 +110,12 @@ func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
 			if err := json.Unmarshal(msg.Data, &payload); err != nil {
 				continue
 			}
-			currentNodeID = payload.NodeID
+			if payload.NodeID != "" && payload.NodeID != authorizedNodeID {
+				continue
+			}
+			currentNodeID = authorizedNodeID
 			node := model.Node{
-				ID:              payload.NodeID,
+				ID:              authorizedNodeID,
 				Hostname:        payload.Hostname,
 				OS:              payload.OS,
 				Platform:        payload.Platform,
@@ -132,7 +136,10 @@ func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
 			if err := json.Unmarshal(msg.Data, &payload); err != nil {
 				continue
 			}
-			nodeID := payload.NodeID
+			if payload.NodeID != "" && payload.NodeID != authorizedNodeID {
+				continue
+			}
+			nodeID := authorizedNodeID
 			if nodeID == "" {
 				nodeID = currentNodeID
 			}
@@ -149,7 +156,7 @@ func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
 			if nodeID == "" {
 				nodeID = currentNodeID
 			}
-			if nodeID == "" {
+			if nodeID == "" || nodeID != authorizedNodeID {
 				continue
 			}
 			if payload.Timestamp == 0 {
@@ -186,15 +193,28 @@ func (h *Hub) writeAck(conn *websocket.Conn, ackType string) error {
 	})
 }
 
-func (h *Hub) authorized(r *http.Request) bool {
+func (h *Hub) authorized(r *http.Request) (string, bool) {
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
 	if auth == "" {
-		return false
+		return "", false
 	}
 	const prefix = "Bearer "
 	if !strings.HasPrefix(auth, prefix) {
-		return false
+		return "", false
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(auth, prefix))
-	return token != "" && token == h.agentToken
+	if token == "" {
+		return "", false
+	}
+	tokenHash := sha256Hex(token)
+	nodeID, err := h.store.FindNodeIDByTokenHash(tokenHash)
+	if err != nil || nodeID == "" {
+		return "", false
+	}
+	return nodeID, true
+}
+
+func sha256Hex(input string) string {
+	sum := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(sum[:])
 }
