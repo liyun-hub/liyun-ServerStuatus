@@ -80,76 +80,8 @@ npm run dev
 - `VITE_API_BASE`（默认 `http://localhost:8080`）
 
 
-## 二进制发布与 Linux `sh` 快速部署
-
-> 适合不使用 Docker 的场景。`deploy.sh` 默认拉起 `server + agent` 两个进程。
-
-### 1) 在构建机打包发布产物
-
-在项目根目录执行：
-
-```bash
-sh build-release.sh v1.0.0
-```
-
-会产出：
-
-- `release/server-status-v1.0.0/`（解包目录）
-- `release/server-status-v1.0.0-linux-amd64.tar.gz`（发布包）
-
-发布包内容：
-
-- `bin/server`（Linux amd64 二进制）
-- `bin/agent`（Linux amd64 二进制）
-- `web/`（前端静态文件）
-- `deploy.sh`（一键启停脚本）
-- `server.env` / `agent.env`（可直接改后使用）
-- `conf/*.env.example`
-
-### 2) 上传并解压到 Linux 服务器
-
-```bash
-mkdir -p /opt/server-status
-cd /opt/server-status
-tar -xzf server-status-v1.0.0-linux-amd64.tar.gz
-cd server-status-v1.0.0
-```
-
-### 3) 修改配置（至少改 token）
-
-保证 `server.env` 与 `agent.env` 的 `AGENT_TOKEN` 一致且非空。
-
-### 4) 使用 `sh` 一键部署
-
-```bash
-sh deploy.sh start
-sh deploy.sh status
-```
-
-常用命令：
-
-```bash
-sh deploy.sh stop
-sh deploy.sh restart
-```
-
-日志与运行信息：
-
-- 日志目录：`logs/`
-- PID 目录：`run/`
-- 数据目录（SQLite）：`data/`
-
-### 5) 前端静态文件发布
-
-`web/` 已是构建完成的静态文件目录，可直接交给 Nginx/Caddy 托管。
-
-例如 Nginx `root` 指向：
-
-```text
-/opt/server-status/server-status-v1.0.0/web
-```
-
 ## Docker Compose 一键部署（可选）
+
 
 ### 1) 准备环境变量
 
