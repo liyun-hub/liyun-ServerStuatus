@@ -1,0 +1,13 @@
+# Go
+**/bin/
+**/*.exe
+
+# Database
+server/data/
+
+# Node
+web/node_modules/
+web/dist/
+
+# Env
+**/.env
