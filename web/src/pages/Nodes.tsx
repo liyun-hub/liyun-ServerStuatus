@@ -32,50 +32,59 @@ export default function NodesPage() {
   }, []);
 
   return (
-    <section>
-      <h2>节点总览</h2>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      <table width="100%" cellPadding={8} style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th align="left">节点</th>
-            <th align="left">状态</th>
-            <th align="left">CPU</th>
-            <th align="left">内存</th>
-            <th align="left">硬盘</th>
-            <th align="left">流量</th>
-            <th align="left">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {nodes.map((node) => (
-            <tr key={node.id} style={{ borderTop: "1px solid #ddd" }}>
-              <td>
-                <div>{node.displayName}</div>
-                <small>{node.id}</small>
-              </td>
-              <td>{node.online ? "在线" : "离线"}</td>
-              <td>{fmtPercent(node.latest?.cpuUsage)}</td>
-              <td>{fmtPercent(node.latest?.memoryUsage)}</td>
-              <td>{fmtPercent(node.latest?.diskUsage)}</td>
-              <td>
-                ↓{(node.latest?.netRxRate ?? 0).toFixed(0)} B/s / ↑
-                {(node.latest?.netTxRate ?? 0).toFixed(0)} B/s
-              </td>
-              <td>
-                <Link to={`/nodes/${node.id}`}>查看详情</Link>
-              </td>
-            </tr>
-          ))}
-          {nodes.length === 0 && (
-            <tr>
-              <td colSpan={7} style={{ padding: 20, color: "#777" }}>
-                暂无节点，请先启动 agent。
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+    <section className="app-page">
+      <div className="app-card">
+        <h2 className="app-card-title">节点总览</h2>
+        {error && <p className="app-error">{error}</p>}
+
+        <div className="app-table-wrap">
+          <table className="app-table">
+            <thead>
+              <tr>
+                <th>节点</th>
+                <th>状态</th>
+                <th>CPU</th>
+                <th>内存</th>
+                <th>硬盘</th>
+                <th>流量</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map((node) => (
+                <tr key={node.id}>
+                  <td>
+                    <div>{node.displayName}</div>
+                    <small className="app-muted">{node.id}</small>
+                  </td>
+                  <td>
+                    <span className={`app-badge ${node.online ? "app-badge-online" : "app-badge-offline"}`}>
+                      {node.online ? "在线" : "离线"}
+                    </span>
+                  </td>
+                  <td>{fmtPercent(node.latest?.cpuUsage)}</td>
+                  <td>{fmtPercent(node.latest?.memoryUsage)}</td>
+                  <td>{fmtPercent(node.latest?.diskUsage)}</td>
+                  <td>
+                    ↓{(node.latest?.netRxRate ?? 0).toFixed(0)} B/s / ↑
+                    {(node.latest?.netTxRate ?? 0).toFixed(0)} B/s
+                  </td>
+                  <td>
+                    <Link to={`/nodes/${node.id}`}>查看详情</Link>
+                  </td>
+                </tr>
+              ))}
+              {nodes.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="app-empty">
+                    暂无节点，请先启动 agent。
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
   );
 }

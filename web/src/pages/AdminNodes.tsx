@@ -154,104 +154,134 @@ export default function AdminNodesPage() {
   };
 
   return (
-    <section>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h2 style={{ margin: 0 }}>后台节点管理</h2>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={() => void load()} disabled={loading}>
-            刷新
+    <section className="app-page">
+      <div className="app-card">
+        <div className="app-toolbar">
+          <h2 className="app-card-title" style={{ marginBottom: 0 }}>
+            后台节点管理
+          </h2>
+          <div className="app-actions">
+            <button
+              type="button"
+              className="app-button app-button-secondary"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              刷新
+            </button>
+            <button type="button" className="app-button app-button-secondary" onClick={onLogout}>
+              退出登录
+            </button>
+          </div>
+        </div>
+
+        {error && <p className="app-error">{error}</p>}
+
+        <form onSubmit={onCreateNode} className="app-form-inline">
+          <input
+            className="app-input"
+            placeholder="nodeId (唯一)"
+            value={newNodeId}
+            onChange={(e) => setNewNodeId(e.target.value)}
+            required
+          />
+          <input
+            className="app-input"
+            placeholder="displayName (可选)"
+            value={newDisplayName}
+            onChange={(e) => setNewDisplayName(e.target.value)}
+          />
+          <button type="submit" className="app-button">
+            新增节点
           </button>
-          <button type="button" onClick={onLogout}>
-            退出登录
-          </button>
+        </form>
+      </div>
+
+      <div className="app-card">
+        <div className="app-table-wrap">
+          <table className="app-table">
+            <thead>
+              <tr>
+                <th>nodeId</th>
+                <th>displayName</th>
+                <th>状态</th>
+                <th>CPU</th>
+                <th>内存</th>
+                <th>硬盘</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedNodes.map((node) => (
+                <tr key={node.nodeId}>
+                  <td>{node.nodeId}</td>
+                  <td>
+                    <div className="app-actions">
+                      <input
+                        className="app-input"
+                        value={renameDraft[node.nodeId] ?? ""}
+                        onChange={(e) =>
+                          setRenameDraft((old) => ({
+                            ...old,
+                            [node.nodeId]: e.target.value,
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="app-button app-button-secondary"
+                        onClick={() => void onRename(node.nodeId)}
+                      >
+                        重命名
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`app-badge ${node.online ? "app-badge-online" : "app-badge-offline"}`}>
+                      {node.online ? "在线" : "离线"}
+                    </span>
+                  </td>
+                  <td>{fmtPercent(node.latest?.cpuUsage)}</td>
+                  <td>{fmtPercent(node.latest?.memoryUsage)}</td>
+                  <td>{fmtPercent(node.latest?.diskUsage)}</td>
+                  <td>
+                    <div className="app-actions">
+                      <button
+                        type="button"
+                        className="app-button app-button-warning"
+                        onClick={() => void onResetToken(node.nodeId)}
+                      >
+                        重置 token
+                      </button>
+                      <button
+                        type="button"
+                        className="app-button app-button-secondary"
+                        onClick={() => void onInstallCommand(node.nodeId)}
+                      >
+                        生成安装命令
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {sortedNodes.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="app-empty">
+                    暂无节点
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {error && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{error}</p>}
-
-      <form onSubmit={onCreateNode} style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        <input
-          placeholder="nodeId (唯一)"
-          value={newNodeId}
-          onChange={(e) => setNewNodeId(e.target.value)}
-          required
-        />
-        <input
-          placeholder="displayName (可选)"
-          value={newDisplayName}
-          onChange={(e) => setNewDisplayName(e.target.value)}
-        />
-        <button type="submit">新增节点</button>
-      </form>
-
-      <table width="100%" cellPadding={8} style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th align="left">nodeId</th>
-            <th align="left">displayName</th>
-            <th align="left">状态</th>
-            <th align="left">CPU</th>
-            <th align="left">内存</th>
-            <th align="left">硬盘</th>
-            <th align="left">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedNodes.map((node) => (
-            <tr key={node.nodeId} style={{ borderTop: "1px solid #ddd" }}>
-              <td>{node.nodeId}</td>
-              <td>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    value={renameDraft[node.nodeId] ?? ""}
-                    onChange={(e) =>
-                      setRenameDraft((old) => ({
-                        ...old,
-                        [node.nodeId]: e.target.value,
-                      }))
-                    }
-                  />
-                  <button type="button" onClick={() => void onRename(node.nodeId)}>
-                    重命名
-                  </button>
-                </div>
-              </td>
-              <td>{node.online ? "在线" : "离线"}</td>
-              <td>{fmtPercent(node.latest?.cpuUsage)}</td>
-              <td>{fmtPercent(node.latest?.memoryUsage)}</td>
-              <td>{fmtPercent(node.latest?.diskUsage)}</td>
-              <td>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button type="button" onClick={() => void onResetToken(node.nodeId)}>
-                    重置 token
-                  </button>
-                  <button type="button" onClick={() => void onInstallCommand(node.nodeId)}>
-                    生成安装命令
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-          {sortedNodes.length === 0 && (
-            <tr>
-              <td colSpan={7} style={{ color: "#777", padding: 20 }}>
-                暂无节点
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-
       {resultBody && (
-        <div style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 8 }}>{resultTitle}</h3>
-          <textarea
-            value={resultBody}
-            readOnly
-            style={{ width: "100%", minHeight: 100, fontFamily: "monospace" }}
-          />
-          <div style={{ marginTop: 8 }}>
-            <button type="button" onClick={() => void onCopyResult()}>
+        <div className="app-card">
+          <h3 className="app-subtitle">{resultTitle}</h3>
+          <textarea className="app-textarea" value={resultBody} readOnly />
+          <div className="app-actions" style={{ marginTop: 8 }}>
+            <button type="button" className="app-button app-button-secondary" onClick={() => void onCopyResult()}>
               复制
             </button>
           </div>

@@ -6,28 +6,24 @@ import AlertEventsPage from "./pages/AlertEvents";
 import AdminLoginPage from "./pages/AdminLogin";
 import AdminNodesPage from "./pages/AdminNodes";
 
-const navStyle = ({ isActive }: { isActive: boolean }) => ({
-  marginRight: 12,
-  textDecoration: "none",
-  color: isActive ? "#2563eb" : "#333",
-  fontWeight: isActive ? 700 : 500,
-});
+const navClassName = ({ isActive }: { isActive: boolean }) =>
+  `app-nav-link${isActive ? " active" : ""}`;
 
 export default function App() {
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: 16, fontFamily: "Arial, sans-serif" }}>
-      <h1 style={{ marginTop: 0 }}>Server Status</h1>
-      <nav style={{ marginBottom: 16 }}>
-        <NavLink to="/" style={navStyle} end>
+    <div className="app-shell">
+      <h1 className="app-title">Server Status</h1>
+      <nav className="app-nav">
+        <NavLink to="/" className={navClassName} end>
           节点
         </NavLink>
-        <NavLink to="/alert-rules" style={navStyle}>
+        <NavLink to="/alert-rules" className={navClassName}>
           告警规则
         </NavLink>
-        <NavLink to="/alert-events" style={navStyle}>
+        <NavLink to="/alert-events" className={navClassName}>
           告警事件
         </NavLink>
-        <NavLink to="/admin/nodes" style={navStyle}>
+        <NavLink to="/admin/nodes" className={navClassName}>
           后台管理
         </NavLink>
       </nav>

@@ -49,38 +49,57 @@ export default function NodeDetailPage() {
   const txSeries = useMemo(() => toSeries(history, (r) => r.netTxRate), [history]);
 
   return (
-    <section>
-      <h2>节点详情</h2>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {node && (
-        <div style={{ marginBottom: 16 }}>
-          <div>
-            <strong>{node.hostname}</strong> ({node.id})
+    <section className="app-page">
+      <div className="app-card">
+        <h2 className="app-card-title">节点详情</h2>
+        {error && <p className="app-error">{error}</p>}
+
+        {node && (
+          <div className="app-node-grid">
+            <div className="app-node-meta">
+              <div>
+                <strong>{node.hostname}</strong> <span className="app-muted">({node.id})</span>
+              </div>
+              <div>
+                {node.os} / {node.platform} {node.platformVersion} / {node.arch}
+              </div>
+              <div>
+                CPU: {node.cpuModel} x {node.cpuCores}
+              </div>
+              <div>
+                <span className={`app-badge ${node.online ? "app-badge-online" : "app-badge-offline"}`}>
+                  {node.online ? "在线" : "离线"}
+                </span>
+              </div>
+            </div>
           </div>
-          <div>
-            {node.os} / {node.platform} {node.platformVersion} / {node.arch}
-          </div>
-          <div>
-            CPU: {node.cpuModel} x {node.cpuCores}
-          </div>
-          <div>状态：{node.online ? "在线" : "离线"}</div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <h3>CPU 使用率 (%)</h3>
-      <MetricLineChart data={cpuSeries} color="#2563eb" unit="%" />
+      <div className="app-card">
+        <h3 className="app-subtitle">CPU 使用率 (%)</h3>
+        <MetricLineChart data={cpuSeries} color="#2563eb" unit="%" />
+      </div>
 
-      <h3>内存使用率 (%)</h3>
-      <MetricLineChart data={memSeries} color="#16a34a" unit="%" />
+      <div className="app-card">
+        <h3 className="app-subtitle">内存使用率 (%)</h3>
+        <MetricLineChart data={memSeries} color="#16a34a" unit="%" />
+      </div>
 
-      <h3>硬盘使用率 (%)</h3>
-      <MetricLineChart data={diskSeries} color="#9333ea" unit="%" />
+      <div className="app-card">
+        <h3 className="app-subtitle">硬盘使用率 (%)</h3>
+        <MetricLineChart data={diskSeries} color="#9333ea" unit="%" />
+      </div>
 
-      <h3>下行速率 (B/s)</h3>
-      <MetricLineChart data={rxSeries} color="#ea580c" unit="" />
+      <div className="app-card">
+        <h3 className="app-subtitle">下行速率 (B/s)</h3>
+        <MetricLineChart data={rxSeries} color="#ea580c" unit="" />
+      </div>
 
-      <h3>上行速率 (B/s)</h3>
-      <MetricLineChart data={txSeries} color="#dc2626" unit="" />
+      <div className="app-card">
+        <h3 className="app-subtitle">上行速率 (B/s)</h3>
+        <MetricLineChart data={txSeries} color="#dc2626" unit="" />
+      </div>
     </section>
   );
 }

@@ -25,29 +25,38 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <section style={{ maxWidth: 420, margin: "40px auto" }}>
-      <h2>后台登录</h2>
-      {error && <p style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{error}</p>}
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>用户名</span>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} required />
-        </label>
+    <section className="app-page app-auth-wrap">
+      <div className="app-card">
+        <h2 className="app-card-title">后台登录</h2>
+        {error && <p className="app-error">{error}</p>}
 
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>密码</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
+        <form onSubmit={onSubmit} className="app-form">
+          <label className="app-field">
+            <span>用户名</span>
+            <input
+              className="app-input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </label>
 
-        <button type="submit" disabled={loading}>
-          {loading ? "登录中..." : "登录"}
-        </button>
-      </form>
+          <label className="app-field">
+            <span>密码</span>
+            <input
+              className="app-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
+
+          <button type="submit" className="app-button" disabled={loading}>
+            {loading ? "登录中..." : "登录"}
+          </button>
+        </form>
+      </div>
     </section>
   );
 }
