@@ -58,8 +58,6 @@ export const api = {
     getNode: (id) => request(`/api/nodes/${id}`),
     getNodeHistory: (id, from, to, limit = 1000) => request(`/api/nodes/${id}/history?from=${from}&to=${to}&limit=${limit}`),
     listAlertRules: () => request("/api/alert-rules"),
-    createAlertRule: (payload) => request("/api/alert-rules", { method: "POST", body: JSON.stringify(payload) }),
-    updateAlertRule: (id, payload) => request(`/api/alert-rules/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
     listAlertEvents: () => request("/api/alert-events"),
     adminLogin: (username, password) => request("/api/admin/login", {
         method: "POST",
@@ -74,4 +72,7 @@ export const api = {
     }),
     adminResetNodeToken: (nodeId) => adminRequest(`/api/admin/nodes/${nodeId}/token/reset`, { method: "POST" }),
     adminInstallCommand: (nodeId) => adminRequest(`/api/admin/nodes/${nodeId}/install-command`, { method: "POST" }),
+    adminListAlertRules: () => adminRequest("/api/alert-rules"),
+    adminCreateAlertRule: (payload) => adminRequest("/api/alert-rules", { method: "POST", body: JSON.stringify(payload) }),
+    adminUpdateAlertRule: (id, payload) => adminRequest(`/api/alert-rules/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
 };

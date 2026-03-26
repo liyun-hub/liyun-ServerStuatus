@@ -86,10 +86,6 @@ export const api = {
     request<MetricsSnapshot[]>(`/api/nodes/${id}/history?from=${from}&to=${to}&limit=${limit}`),
 
   listAlertRules: () => request<AlertRule[]>("/api/alert-rules"),
-  createAlertRule: (payload: Omit<AlertRule, "id" | "createdAt" | "updatedAt">) =>
-    request<AlertRule>("/api/alert-rules", { method: "POST", body: JSON.stringify(payload) }),
-  updateAlertRule: (id: number, payload: Omit<AlertRule, "id" | "createdAt" | "updatedAt">) =>
-    request<AlertRule>(`/api/alert-rules/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   listAlertEvents: () => request<AlertEvent[]>("/api/alert-events"),
 
   adminLogin: (username: string, password: string) =>
@@ -110,5 +106,10 @@ export const api = {
     adminRequest<ResetNodeTokenResponse>(`/api/admin/nodes/${nodeId}/token/reset`, { method: "POST" }),
   adminInstallCommand: (nodeId: string) =>
     adminRequest<InstallCommandResponse>(`/api/admin/nodes/${nodeId}/install-command`, { method: "POST" }),
+  adminListAlertRules: () => adminRequest<AlertRule[]>("/api/alert-rules"),
+  adminCreateAlertRule: (payload: Omit<AlertRule, "id" | "createdAt" | "updatedAt">) =>
+    adminRequest<AlertRule>("/api/alert-rules", { method: "POST", body: JSON.stringify(payload) }),
+  adminUpdateAlertRule: (id: number, payload: Omit<AlertRule, "id" | "createdAt" | "updatedAt">) =>
+    adminRequest<AlertRule>(`/api/alert-rules/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
 };
 
