@@ -41,7 +41,6 @@ server-status/
 ├─ agent/                  # Go 探针（采集并上报系统指标）
 ├─ web/                    # React 管理端
 ├─ docs/                   # 接入与使用文档
-├─ doc/                    # 项目说明（历史文档）
 ├─ docker-compose.yml      # 一键部署编排
 ├─ .env.example            # 环境变量模板
 ├─ build-release.sh        # 一键打包脚本
@@ -294,4 +293,3 @@ sh build-release.sh v1.0.0
 ## 文档索引
 
 - 前端 API 完整接入指南：[`docs/web.md`](docs/web.md)
-- 项目说明（历史文档）：[`doc/项目文档.md`](doc/项目文档.md)
