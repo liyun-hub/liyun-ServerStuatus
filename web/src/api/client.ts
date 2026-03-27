@@ -15,6 +15,7 @@ import type {
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8080";
 
 const ADMIN_TOKEN_KEY = "admin_token";
+const ADMIN_MUST_CHANGE_KEY = "admin_must_change_password";
 
 function getAdminToken() {
   return localStorage.getItem(ADMIN_TOKEN_KEY) ?? "";
@@ -26,6 +27,18 @@ function setAdminToken(token: string) {
 
 function clearAdminToken() {
   localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
+function getAdminMustChangePassword() {
+  return localStorage.getItem(ADMIN_MUST_CHANGE_KEY) === "1";
+}
+
+function setAdminMustChangePassword(value: boolean) {
+  localStorage.setItem(ADMIN_MUST_CHANGE_KEY, value ? "1" : "0");
+}
+
+function clearAdminMustChangePassword() {
+  localStorage.removeItem(ADMIN_MUST_CHANGE_KEY);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -66,6 +79,7 @@ async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
     const message = (error as Error).message;
     if (message.includes("unauthorized") || message.includes("401")) {
       clearAdminToken();
+      clearAdminMustChangePassword();
     }
     throw error;
   }
@@ -75,8 +89,13 @@ export const auth = {
   tokenKey: ADMIN_TOKEN_KEY,
   getToken: getAdminToken,
   setToken: setAdminToken,
-  clearToken: clearAdminToken,
+  clearToken: () => {
+    clearAdminToken();
+    clearAdminMustChangePassword();
+  },
   isLoggedIn: () => !!getAdminToken(),
+  mustChangePassword: getAdminMustChangePassword,
+  setMustChangePassword: setAdminMustChangePassword,
 };
 
 export const api = {
@@ -94,6 +113,11 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   adminLogout: () => adminRequest<{ ok: boolean }>("/api/admin/logout", { method: "POST" }),
+  adminChangePassword: (currentPassword: string, newPassword: string) =>
+    adminRequest<AdminLoginResponse>("/api/admin/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   adminListNodes: () => adminRequest<AdminNodeItem[]>("/api/admin/nodes"),
   adminCreateNode: (payload: CreateNodeRequest) =>
     adminRequest<CreateNodeResponse>("/api/admin/nodes", { method: "POST", body: JSON.stringify(payload) }),

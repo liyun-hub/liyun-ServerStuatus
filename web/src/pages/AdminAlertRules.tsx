@@ -24,12 +24,12 @@ const defaultForm: RuleForm = {
 function parseError(error: unknown) {
   const message = (error as Error)?.message ?? "请求失败";
   try {
-    const data = JSON.parse(message) as { error?: string };
-    if (data.error) return data.error;
+    const data = JSON.parse(message) as { error?: string; code?: string };
+    if (data.error) return { message: data.error, code: data.code ?? "" };
   } catch {
-    return message;
+    return { message, code: "" };
   }
-  return message;
+  return { message, code: "" };
 }
 
 function metricLabel(metric: string) {
@@ -57,6 +57,21 @@ export default function AdminAlertRulesPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const handleAdminError = (e: unknown): true | string => {
+    const parsed = parseError(e);
+    if (parsed.message.includes("unauthorized") || parsed.message.includes("未登录")) {
+      auth.clearToken();
+      navigate("/admin/login", { replace: true });
+      return true;
+    }
+    if (parsed.code === "PASSWORD_CHANGE_REQUIRED" || parsed.message.includes("password change required")) {
+      auth.setMustChangePassword(true);
+      navigate("/admin/change-password", { replace: true });
+      return true;
+    }
+    return parsed.message;
+  };
+
   const load = async () => {
     setLoading(true);
     setError("");
@@ -64,13 +79,11 @@ export default function AdminAlertRulesPage() {
       const data = await api.adminListAlertRules();
       setRules(data);
     } catch (e) {
-      const message = parseError(e);
-      if (message.includes("unauthorized") || message.includes("未登录")) {
-        auth.clearToken();
-        navigate("/admin/login", { replace: true });
-        return;
+      const handled = handleAdminError(e);
+      if (handled !== true) {
+        setError(handled);
       }
-      setError(message);
+      return;
     } finally {
       setLoading(false);
     }
@@ -102,7 +115,10 @@ export default function AdminAlertRulesPage() {
       resetForm();
       await load();
     } catch (e) {
-      setError(parseError(e));
+      const handled = handleAdminError(e);
+      if (handled !== true) {
+        setError(handled);
+      }
     }
   };
 
@@ -131,7 +147,10 @@ export default function AdminAlertRulesPage() {
       });
       await load();
     } catch (e) {
-      setError(parseError(e));
+      const handled = handleAdminError(e);
+      if (handled !== true) {
+        setError(handled);
+      }
     }
   };
 

@@ -6,12 +6,12 @@ import type { AdminNodeItem } from "../types";
 function parseError(error: unknown) {
   const message = (error as Error)?.message ?? "请求失败";
   try {
-    const data = JSON.parse(message) as { error?: string };
-    if (data.error) return data.error;
+    const data = JSON.parse(message) as { error?: string; code?: string };
+    if (data.error) return { message: data.error, code: data.code ?? "" };
   } catch {
-    return message;
+    return { message, code: "" };
   }
-  return message;
+  return { message, code: "" };
 }
 
 function fmtPercent(v?: number) {
@@ -29,6 +29,21 @@ export default function AdminNodesPage() {
   const [resultBody, setResultBody] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const handleAdminError = (e: unknown): true | string => {
+    const parsed = parseError(e);
+    if (parsed.message.includes("unauthorized") || parsed.message.includes("未登录")) {
+      auth.clearToken();
+      navigate("/admin/login", { replace: true });
+      return true;
+    }
+    if (parsed.code === "PASSWORD_CHANGE_REQUIRED" || parsed.message.includes("password change required")) {
+      auth.setMustChangePassword(true);
+      navigate("/admin/change-password", { replace: true });
+      return true;
+    }
+    return parsed.message;
+  };
 
   const syncDraft = (items: AdminNodeItem[]) => {
     setRenameDraft((old) => {
@@ -48,13 +63,11 @@ export default function AdminNodesPage() {
       setNodes(data);
       syncDraft(data);
     } catch (e) {
-      const message = parseError(e);
-      if (message.includes("unauthorized")) {
-        auth.clearToken();
-        navigate("/admin/login", { replace: true });
-        return;
+      const handled = handleAdminError(e);
+      if (handled !== true) {
+        setError(handled);
       }
-      setError(message);
+      return;
     } finally {
       setLoading(false);
     }
@@ -92,7 +105,10 @@ export default function AdminNodesPage() {
       setNewDisplayName("");
       await load();
     } catch (e) {
-      setError(parseError(e));
+      const handled = handleAdminError(e);
+      if (handled !== true) {
+        setError(handled);
+      }
     }
   };
 
@@ -107,7 +123,10 @@ export default function AdminNodesPage() {
       await api.adminUpdateNodeDisplayName(nodeId, { displayName });
       await load();
     } catch (e) {
-      setError(parseError(e));
+      const handled = handleAdminError(e);
+      if (handled !== true) {
+        setError(handled);
+      }
     }
   };
 
@@ -118,7 +137,10 @@ export default function AdminNodesPage() {
       setResultTitle(`节点 ${res.nodeId} 新 token（仅显示一次）`);
       setResultBody(res.token);
     } catch (e) {
-      setError(parseError(e));
+      const handled = handleAdminError(e);
+      if (handled !== true) {
+        setError(handled);
+      }
     }
   };
 
@@ -130,7 +152,10 @@ export default function AdminNodesPage() {
       setResultBody(res.command);
       await load();
     } catch (e) {
-      setError(parseError(e));
+      const handled = handleAdminError(e);
+      if (handled !== true) {
+        setError(handled);
+      }
     }
   };
 

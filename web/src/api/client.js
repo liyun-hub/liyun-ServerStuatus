@@ -1,5 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8080";
 const ADMIN_TOKEN_KEY = "admin_token";
+const ADMIN_MUST_CHANGE_KEY = "admin_must_change_password";
 function getAdminToken() {
     return localStorage.getItem(ADMIN_TOKEN_KEY) ?? "";
 }
@@ -8,6 +9,15 @@ function setAdminToken(token) {
 }
 function clearAdminToken() {
     localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+function getAdminMustChangePassword() {
+    return localStorage.getItem(ADMIN_MUST_CHANGE_KEY) === "1";
+}
+function setAdminMustChangePassword(value) {
+    localStorage.setItem(ADMIN_MUST_CHANGE_KEY, value ? "1" : "0");
+}
+function clearAdminMustChangePassword() {
+    localStorage.removeItem(ADMIN_MUST_CHANGE_KEY);
 }
 async function request(path, init) {
     const headers = new Headers(init?.headers ?? { "Content-Type": "application/json" });
@@ -42,6 +52,7 @@ async function adminRequest(path, init) {
         const message = error.message;
         if (message.includes("unauthorized") || message.includes("401")) {
             clearAdminToken();
+            clearAdminMustChangePassword();
         }
         throw error;
     }
@@ -50,8 +61,13 @@ export const auth = {
     tokenKey: ADMIN_TOKEN_KEY,
     getToken: getAdminToken,
     setToken: setAdminToken,
-    clearToken: clearAdminToken,
+    clearToken: () => {
+        clearAdminToken();
+        clearAdminMustChangePassword();
+    },
     isLoggedIn: () => !!getAdminToken(),
+    mustChangePassword: getAdminMustChangePassword,
+    setMustChangePassword: setAdminMustChangePassword,
 };
 export const api = {
     listNodes: () => request("/api/nodes"),
@@ -64,6 +80,10 @@ export const api = {
         body: JSON.stringify({ username, password }),
     }),
     adminLogout: () => adminRequest("/api/admin/logout", { method: "POST" }),
+    adminChangePassword: (currentPassword, newPassword) => adminRequest("/api/admin/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+    }),
     adminListNodes: () => adminRequest("/api/admin/nodes"),
     adminCreateNode: (payload) => adminRequest("/api/admin/nodes", { method: "POST", body: JSON.stringify(payload) }),
     adminUpdateNodeDisplayName: (nodeId, payload) => adminRequest(`/api/admin/nodes/${nodeId}/display-name`, {

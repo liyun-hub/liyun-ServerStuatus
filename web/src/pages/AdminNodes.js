@@ -7,12 +7,12 @@ function parseError(error) {
     try {
         const data = JSON.parse(message);
         if (data.error)
-            return data.error;
+            return { message: data.error, code: data.code ?? "" };
     }
     catch {
-        return message;
+        return { message, code: "" };
     }
-    return message;
+    return { message, code: "" };
 }
 function fmtPercent(v) {
     if (v === undefined)
@@ -29,6 +29,20 @@ export default function AdminNodesPage() {
     const [resultBody, setResultBody] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const handleAdminError = (e) => {
+        const parsed = parseError(e);
+        if (parsed.message.includes("unauthorized") || parsed.message.includes("未登录")) {
+            auth.clearToken();
+            navigate("/admin/login", { replace: true });
+            return true;
+        }
+        if (parsed.code === "PASSWORD_CHANGE_REQUIRED" || parsed.message.includes("password change required")) {
+            auth.setMustChangePassword(true);
+            navigate("/admin/change-password", { replace: true });
+            return true;
+        }
+        return parsed.message;
+    };
     const syncDraft = (items) => {
         setRenameDraft((old) => {
             const next = {};
@@ -47,13 +61,11 @@ export default function AdminNodesPage() {
             syncDraft(data);
         }
         catch (e) {
-            const message = parseError(e);
-            if (message.includes("unauthorized")) {
-                auth.clearToken();
-                navigate("/admin/login", { replace: true });
-                return;
+            const handled = handleAdminError(e);
+            if (handled !== true) {
+                setError(handled);
             }
-            setError(message);
+            return;
         }
         finally {
             setLoading(false);
@@ -86,7 +98,10 @@ export default function AdminNodesPage() {
             await load();
         }
         catch (e) {
-            setError(parseError(e));
+            const handled = handleAdminError(e);
+            if (handled !== true) {
+                setError(handled);
+            }
         }
     };
     const onRename = async (nodeId) => {
@@ -101,7 +116,10 @@ export default function AdminNodesPage() {
             await load();
         }
         catch (e) {
-            setError(parseError(e));
+            const handled = handleAdminError(e);
+            if (handled !== true) {
+                setError(handled);
+            }
         }
     };
     const onResetToken = async (nodeId) => {
@@ -112,7 +130,10 @@ export default function AdminNodesPage() {
             setResultBody(res.token);
         }
         catch (e) {
-            setError(parseError(e));
+            const handled = handleAdminError(e);
+            if (handled !== true) {
+                setError(handled);
+            }
         }
     };
     const onInstallCommand = async (nodeId) => {
@@ -124,7 +145,10 @@ export default function AdminNodesPage() {
             await load();
         }
         catch (e) {
-            setError(parseError(e));
+            const handled = handleAdminError(e);
+            if (handled !== true) {
+                setError(handled);
+            }
         }
     };
     const onCopyResult = async () => {

@@ -2,6 +2,18 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, auth } from "../api/client";
+function parseError(error) {
+    const message = error?.message ?? "登录失败";
+    try {
+        const data = JSON.parse(message);
+        if (data.error)
+            return data.error;
+    }
+    catch {
+        return message;
+    }
+    return message;
+}
 export default function AdminLoginPage() {
     const navigate = useNavigate();
     const [username, setUsername] = useState("admin");
@@ -15,10 +27,11 @@ export default function AdminLoginPage() {
         try {
             const res = await api.adminLogin(username.trim(), password);
             auth.setToken(res.token);
-            navigate("/admin/nodes", { replace: true });
+            auth.setMustChangePassword(res.mustChangePassword);
+            navigate(res.mustChangePassword ? "/admin/change-password" : "/admin/nodes", { replace: true });
         }
         catch (e) {
-            setError(e.message || "登录失败");
+            setError(parseError(e));
         }
         finally {
             setLoading(false);

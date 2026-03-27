@@ -64,6 +64,7 @@ export type AlertEvent = {
 export type AdminLoginResponse = {
   token: string;
   expiresAt: number;
+  mustChangePassword: boolean;
 };
 
 export type AdminNodeItem = {

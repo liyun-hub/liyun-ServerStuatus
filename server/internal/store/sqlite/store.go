@@ -135,6 +135,23 @@ func (s *Store) init() error {
 			expires_at INTEGER NOT NULL,
 			created_at INTEGER NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS app_users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			role TEXT NOT NULL,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			must_change_password INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS app_sessions (
+			token_hash TEXT PRIMARY KEY,
+			username TEXT NOT NULL,
+			role TEXT NOT NULL,
+			expires_at INTEGER NOT NULL,
+			created_at INTEGER NOT NULL
+		);`,
 	}
 
 	for _, stmt := range schema {
@@ -155,6 +172,9 @@ func (s *Store) init() error {
 	}
 
 	if err := s.seedDefaultAdmin(); err != nil {
+		return err
+	}
+	if err := s.seedAppUsersFromLegacyAdmins(); err != nil {
 		return err
 	}
 
@@ -256,6 +276,46 @@ func (s *Store) seedDefaultAdmin() error {
 		VALUES (?, ?, ?, ?, ?)
 	`, username, string(hash), 1, now, now)
 	return err
+}
+
+func (s *Store) seedAppUsersFromLegacyAdmins() error {
+	rows, err := s.db.Query(`SELECT username, password_hash, must_change_password, created_at, updated_at FROM admin_users`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type legacyAdminRow struct {
+		username           string
+		passwordHash       string
+		mustChangePassword int
+		createdAt          int64
+		updatedAt          int64
+	}
+
+	admins := make([]legacyAdminRow, 0)
+	for rows.Next() {
+		var item legacyAdminRow
+		if err := rows.Scan(&item.username, &item.passwordHash, &item.mustChangePassword, &item.createdAt, &item.updatedAt); err != nil {
+			return err
+		}
+		admins = append(admins, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, item := range admins {
+		if _, err := s.db.Exec(`
+			INSERT INTO app_users (username, password_hash, role, enabled, must_change_password, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(username) DO NOTHING
+		`, item.username, item.passwordHash, "admin", 1, item.mustChangePassword, item.createdAt, item.updatedAt); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *Store) UpsertNode(node model.Node) error {

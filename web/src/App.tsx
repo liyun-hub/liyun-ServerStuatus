@@ -8,19 +8,31 @@ import AlertEventsPage from "./pages/AlertEvents";
 import AdminLoginPage from "./pages/AdminLogin";
 import AdminNodesPage from "./pages/AdminNodes";
 import AdminAlertRulesPage from "./pages/AdminAlertRules";
+import AdminChangePasswordPage from "./pages/AdminChangePassword";
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `app-nav-link${isActive ? " active" : ""}`;
 
-function RequireAdmin({ children }: { children: ReactElement }) {
+function RequireAdminSession({ children }: { children: ReactElement }) {
   if (!auth.isLoggedIn()) {
     return <Navigate to="/admin/login" replace />;
   }
   return children;
 }
 
+function RequireAdminBusiness({ children }: { children: ReactElement }) {
+  if (!auth.isLoggedIn()) {
+    return <Navigate to="/admin/login" replace />;
+  }
+  if (auth.mustChangePassword()) {
+    return <Navigate to="/admin/change-password" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   const isAdminLoggedIn = auth.isLoggedIn();
+  const adminMustChangePassword = auth.mustChangePassword();
 
   return (
     <div className="app-shell">
@@ -36,14 +48,20 @@ export default function App() {
           告警事件
         </NavLink>
         {isAdminLoggedIn ? (
-          <>
-            <NavLink to="/admin/nodes" className={navClassName}>
-              管理端-节点
+          adminMustChangePassword ? (
+            <NavLink to="/admin/change-password" className={navClassName}>
+              管理端-修改密码
             </NavLink>
-            <NavLink to="/admin/alert-rules" className={navClassName}>
-              管理端-告警规则
-            </NavLink>
-          </>
+          ) : (
+            <>
+              <NavLink to="/admin/nodes" className={navClassName}>
+                管理端-节点
+              </NavLink>
+              <NavLink to="/admin/alert-rules" className={navClassName}>
+                管理端-告警规则
+              </NavLink>
+            </>
+          )
         ) : (
           <NavLink to="/admin/login" className={navClassName}>
             管理端登录
@@ -59,27 +77,46 @@ export default function App() {
 
         <Route
           path="/admin/login"
-          element={isAdminLoggedIn ? <Navigate to="/admin/nodes" replace /> : <AdminLoginPage />}
+          element={
+            isAdminLoggedIn ? (
+              <Navigate to={adminMustChangePassword ? "/admin/change-password" : "/admin/nodes"} replace />
+            ) : (
+              <AdminLoginPage />
+            )
+          }
+        />
+        <Route
+          path="/admin/change-password"
+          element={
+            <RequireAdminSession>
+              {adminMustChangePassword ? <AdminChangePasswordPage /> : <Navigate to="/admin/nodes" replace />}
+            </RequireAdminSession>
+          }
         />
         <Route
           path="/admin/nodes"
           element={
-            <RequireAdmin>
+            <RequireAdminBusiness>
               <AdminNodesPage />
-            </RequireAdmin>
+            </RequireAdminBusiness>
           }
         />
         <Route
           path="/admin/alert-rules"
           element={
-            <RequireAdmin>
+            <RequireAdminBusiness>
               <AdminAlertRulesPage />
-            </RequireAdmin>
+            </RequireAdminBusiness>
           }
         />
         <Route
           path="/admin"
-          element={<Navigate to={isAdminLoggedIn ? "/admin/nodes" : "/admin/login"} replace />}
+          element={
+            <Navigate
+              to={isAdminLoggedIn ? (adminMustChangePassword ? "/admin/change-password" : "/admin/nodes") : "/admin/login"}
+              replace
+            />
+          }
         />
       </Routes>
     </div>
