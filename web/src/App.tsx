@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 import { auth } from "./api/client";
 import NodesPage from "./pages/Nodes";
 import NodeDetailPage from "./pages/NodeDetail";
@@ -12,6 +12,16 @@ import AdminChangePasswordPage from "./pages/AdminChangePassword";
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
   `app-nav-link${isActive ? " active" : ""}`;
+
+function resolveAdminHome() {
+  if (!auth.isLoggedIn()) {
+    return "/admin/login";
+  }
+  if (auth.mustChangePassword()) {
+    return "/admin/change-password";
+  }
+  return "/admin/nodes";
+}
 
 function RequireAdminSession({ children }: { children: ReactElement }) {
   if (!auth.isLoggedIn()) {
@@ -30,10 +40,7 @@ function RequireAdminBusiness({ children }: { children: ReactElement }) {
   return children;
 }
 
-export default function App() {
-  const isAdminLoggedIn = auth.isLoggedIn();
-  const adminMustChangePassword = auth.mustChangePassword();
-
+function UserLayout() {
   return (
     <div className="app-shell">
       <h1 className="app-title">Server Status</h1>
@@ -47,78 +54,77 @@ export default function App() {
         <NavLink to="/alert-events" className={navClassName}>
           告警事件
         </NavLink>
-        {isAdminLoggedIn ? (
-          adminMustChangePassword ? (
-            <NavLink to="/admin/change-password" className={navClassName}>
-              管理端-修改密码
-            </NavLink>
-          ) : (
-            <>
-              <NavLink to="/admin/nodes" className={navClassName}>
-                管理端-节点
-              </NavLink>
-              <NavLink to="/admin/alert-rules" className={navClassName}>
-                管理端-告警规则
-              </NavLink>
-            </>
-          )
-        ) : (
-          <NavLink to="/admin/login" className={navClassName}>
-            管理端登录
-          </NavLink>
-        )}
+        <NavLink to="/admin" className={navClassName}>
+          管理端入口
+        </NavLink>
       </nav>
+      <Outlet />
+    </div>
+  );
+}
 
-      <Routes>
+function AdminLayout() {
+  return (
+    <div className="app-shell">
+      <h1 className="app-title">Server Status 管理端</h1>
+      <nav className="app-nav">
+        <NavLink to="/admin/nodes" className={navClassName}>
+          管理端-节点
+        </NavLink>
+        <NavLink to="/admin/alert-rules" className={navClassName}>
+          管理端-告警规则
+        </NavLink>
+        <NavLink to="/" className={navClassName} end>
+          返回用户面板
+        </NavLink>
+      </nav>
+      <Outlet />
+    </div>
+  );
+}
+
+export default function App() {
+  const isAdminLoggedIn = auth.isLoggedIn();
+  const adminMustChangePassword = auth.mustChangePassword();
+
+  return (
+    <Routes>
+      <Route element={<UserLayout />}>
         <Route path="/" element={<NodesPage />} />
         <Route path="/nodes/:id" element={<NodeDetailPage />} />
         <Route path="/alert-rules" element={<AlertRulesPage />} />
         <Route path="/alert-events" element={<AlertEventsPage />} />
+      </Route>
 
-        <Route
-          path="/admin/login"
-          element={
-            isAdminLoggedIn ? (
-              <Navigate to={adminMustChangePassword ? "/admin/change-password" : "/admin/nodes"} replace />
-            ) : (
-              <AdminLoginPage />
-            )
-          }
-        />
-        <Route
-          path="/admin/change-password"
-          element={
-            <RequireAdminSession>
-              {adminMustChangePassword ? <AdminChangePasswordPage /> : <Navigate to="/admin/nodes" replace />}
-            </RequireAdminSession>
-          }
-        />
-        <Route
-          path="/admin/nodes"
-          element={
-            <RequireAdminBusiness>
-              <AdminNodesPage />
-            </RequireAdminBusiness>
-          }
-        />
-        <Route
-          path="/admin/alert-rules"
-          element={
-            <RequireAdminBusiness>
-              <AdminAlertRulesPage />
-            </RequireAdminBusiness>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <Navigate
-              to={isAdminLoggedIn ? (adminMustChangePassword ? "/admin/change-password" : "/admin/nodes") : "/admin/login"}
-              replace
-            />
-          }
-        />
-      </Routes>
-    </div>
+      <Route
+        path="/admin/login"
+        element={
+          isAdminLoggedIn ? <Navigate to={resolveAdminHome()} replace /> : <AdminLoginPage />
+        }
+      />
+      <Route
+        path="/admin/change-password"
+        element={
+          <RequireAdminSession>
+            {adminMustChangePassword ? <AdminChangePasswordPage /> : <Navigate to="/admin/nodes" replace />}
+          </RequireAdminSession>
+        }
+      />
+      <Route path="/admin" element={<Navigate to={resolveAdminHome()} replace />} />
+
+      <Route
+        element={
+          <RequireAdminBusiness>
+            <AdminLayout />
+          </RequireAdminBusiness>
+        }
+      >
+        <Route path="/admin/nodes" element={<AdminNodesPage />} />
+        <Route path="/admin/alert-rules" element={<AdminAlertRulesPage />} />
+      </Route>
+
+      <Route path="/admin/*" element={<Navigate to={resolveAdminHome()} replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
