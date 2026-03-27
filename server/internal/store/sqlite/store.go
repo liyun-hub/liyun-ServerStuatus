@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 
 	"server-status/server/internal/model"
@@ -124,6 +125,7 @@ func (s *Store) init() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			username TEXT NOT NULL UNIQUE,
 			password_hash TEXT NOT NULL,
+			must_change_password INTEGER NOT NULL DEFAULT 1,
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL
 		);`,
@@ -141,6 +143,13 @@ func (s *Store) init() error {
 		}
 	}
 
+	if err := s.ensureAdminMustChangePasswordColumn(); err != nil {
+		return err
+	}
+	if err := s.backfillAdminMustChangePassword(); err != nil {
+		return err
+	}
+
 	if _, err := s.db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
 		return err
 	}
@@ -152,9 +161,80 @@ func (s *Store) init() error {
 	return nil
 }
 
+func (s *Store) ensureAdminMustChangePasswordColumn() error {
+	rows, err := s.db.Query(`PRAGMA table_info(admin_users);`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	hasColumn := false
+	for rows.Next() {
+		var (
+			cid      int
+			name     string
+			dataType string
+			notNull  int
+			defaultV any
+			pk       int
+		)
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultV, &pk); err != nil {
+			return err
+		}
+		if name == "must_change_password" {
+			hasColumn = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if hasColumn {
+		return nil
+	}
+	_, err = s.db.Exec(`ALTER TABLE admin_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
+func (s *Store) backfillAdminMustChangePassword() error {
+	rows, err := s.db.Query(`SELECT username, password_hash FROM admin_users`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type adminRow struct {
+		username string
+		hash     string
+	}
+	admins := make([]adminRow, 0)
+	for rows.Next() {
+		var item adminRow
+		if err := rows.Scan(&item.username, &item.hash); err != nil {
+			return err
+		}
+		admins = append(admins, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	now := time.Now().Unix()
+	for _, item := range admins {
+		mustChange := 0
+		if bcrypt.CompareHashAndPassword([]byte(item.hash), []byte("admin")) == nil {
+			mustChange = 1
+		}
+		if _, err := s.db.Exec(`UPDATE admin_users SET must_change_password=?, updated_at=? WHERE username=?`, mustChange, now, item.username); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) seedDefaultAdmin() error {
 	const username = "admin"
-	const passwordHash = "$2a$12$fcwmQbC2MNNRLrA2boPbeuF7dIu2MxxL8Yf/v5Rs9B3Ayygf/5cbW"
+	const defaultPassword = "admin"
 
 	row := s.db.QueryRow(`SELECT COUNT(1) FROM admin_users`)
 	var count int
@@ -165,11 +245,16 @@ func (s *Store) seedDefaultAdmin() error {
 		return nil
 	}
 
+	hash, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), 12)
+	if err != nil {
+		return err
+	}
+
 	now := time.Now().Unix()
-	_, err := s.db.Exec(`
-		INSERT INTO admin_users (username, password_hash, created_at, updated_at)
-		VALUES (?, ?, ?, ?)
-	`, username, passwordHash, now, now)
+	_, err = s.db.Exec(`
+		INSERT INTO admin_users (username, password_hash, must_change_password, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, username, string(hash), 1, now, now)
 	return err
 }
 
@@ -795,6 +880,43 @@ func (s *Store) ValidateAdminPasswordHash(username string) (string, error) {
 		return "", err
 	}
 	return hash, nil
+}
+
+func (s *Store) GetAdminMustChangePassword(username string) (bool, error) {
+	row := s.db.QueryRow(`SELECT must_change_password FROM admin_users WHERE username=?`, username)
+	var mustChange int
+	if err := row.Scan(&mustChange); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, sql.ErrNoRows
+		}
+		return false, err
+	}
+	return mustChange == 1, nil
+}
+
+func (s *Store) UpdateAdminPasswordHashAndClearMustChange(username, passwordHash string) error {
+	now := time.Now().Unix()
+	res, err := s.db.Exec(`
+		UPDATE admin_users
+		SET password_hash=?, must_change_password=0, updated_at=?
+		WHERE username=?
+	`, passwordHash, now, username)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) DeleteAdminSessionsByUsername(username string) error {
+	_, err := s.db.Exec(`DELETE FROM admin_sessions WHERE username=?`, username)
+	return err
 }
 
 func (s *Store) UpsertAdminSession(tokenHash, username string, expiresAt int64) error {

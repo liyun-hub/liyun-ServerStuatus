@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -33,8 +35,14 @@ type adminLoginRequest struct {
 }
 
 type adminLoginResponse struct {
-	Token     string `json:"token"`
-	ExpiresAt int64  `json:"expiresAt"`
+	Token              string `json:"token"`
+	ExpiresAt          int64  `json:"expiresAt"`
+	MustChangePassword bool   `json:"mustChangePassword"`
+}
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
 }
 
 type createNodeRequest struct {
@@ -71,6 +79,10 @@ type installCommandResponse struct {
 	Command     string `json:"command"`
 }
 
+type adminContextKey string
+
+const adminUsernameContextKey adminContextKey = "adminUsername"
+
 func RegisterRoutes(mux *http.ServeMux, store *sqlite.Store, cfg config.Config) {
 	api := &API{
 		store:             store,
@@ -82,18 +94,19 @@ func RegisterRoutes(mux *http.ServeMux, store *sqlite.Store, cfg config.Config) 
 
 	mux.HandleFunc("GET /api/health", api.health)
 	mux.HandleFunc("POST /api/admin/login", api.adminLogin)
-	mux.HandleFunc("POST /api/admin/logout", api.requireAdmin(api.adminLogout))
+	mux.HandleFunc("POST /api/admin/logout", api.requireAdminSession(api.adminLogout))
+	mux.HandleFunc("POST /api/admin/change-password", api.requireAdminSession(api.adminChangePassword))
 	mux.HandleFunc("GET /api/nodes", api.listNodes)
 	mux.HandleFunc("GET /api/nodes/{id}", api.getNode)
 	mux.HandleFunc("GET /api/nodes/{id}/history", api.getNodeHistory)
-	mux.HandleFunc("GET /api/admin/nodes", api.requireAdmin(api.adminListNodes))
-	mux.HandleFunc("POST /api/admin/nodes", api.requireAdmin(api.adminCreateNode))
-	mux.HandleFunc("PUT /api/admin/nodes/{id}/display-name", api.requireAdmin(api.adminUpdateNodeDisplayName))
-	mux.HandleFunc("POST /api/admin/nodes/{id}/token/reset", api.requireAdmin(api.adminResetNodeToken))
-	mux.HandleFunc("POST /api/admin/nodes/{id}/install-command", api.requireAdmin(api.adminInstallCommand))
+	mux.HandleFunc("GET /api/admin/nodes", api.requireAdminBusiness(api.adminListNodes))
+	mux.HandleFunc("POST /api/admin/nodes", api.requireAdminBusiness(api.adminCreateNode))
+	mux.HandleFunc("PUT /api/admin/nodes/{id}/display-name", api.requireAdminBusiness(api.adminUpdateNodeDisplayName))
+	mux.HandleFunc("POST /api/admin/nodes/{id}/token/reset", api.requireAdminBusiness(api.adminResetNodeToken))
+	mux.HandleFunc("POST /api/admin/nodes/{id}/install-command", api.requireAdminBusiness(api.adminInstallCommand))
 	mux.HandleFunc("GET /api/alert-rules", api.listAlertRules)
-	mux.HandleFunc("POST /api/alert-rules", api.createAlertRule)
-	mux.HandleFunc("PUT /api/alert-rules/{id}", api.updateAlertRule)
+	mux.HandleFunc("POST /api/alert-rules", api.requireAdminBusiness(api.createAlertRule))
+	mux.HandleFunc("PUT /api/alert-rules/{id}", api.requireAdminBusiness(api.updateAlertRule))
 	mux.HandleFunc("GET /api/alert-events", api.listAlertEvents)
 }
 
@@ -123,6 +136,11 @@ func (a *API) adminLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
+	mustChangePassword, err := a.store.GetAdminMustChangePassword(username)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	token, tokenHash, err := randomToken(32)
 	if err != nil {
@@ -135,7 +153,7 @@ func (a *API) adminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, adminLoginResponse{Token: token, ExpiresAt: expiresAt})
+	writeJSON(w, http.StatusOK, adminLoginResponse{Token: token, ExpiresAt: expiresAt, MustChangePassword: mustChangePassword})
 }
 
 func (a *API) adminLogout(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +164,79 @@ func (a *API) adminLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = a.store.DeleteAdminSession(sha256Hex(token))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a *API) adminChangePassword(w http.ResponseWriter, r *http.Request) {
+	username := adminUsernameFromContext(r.Context())
+	if username == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	currentPassword := strings.TrimSpace(req.CurrentPassword)
+	newPassword := strings.TrimSpace(req.NewPassword)
+	if currentPassword == "" || newPassword == "" {
+		writeError(w, http.StatusBadRequest, "currentPassword and newPassword are required")
+		return
+	}
+	if currentPassword == newPassword {
+		writeError(w, http.StatusBadRequest, "new password must be different from current password")
+		return
+	}
+	if err := validateNewPassword(newPassword); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	hash, err := a.store.ValidateAdminPasswordHash(username)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(currentPassword)) != nil {
+		writeError(w, http.StatusBadRequest, "currentPassword is incorrect")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(newPassword)) == nil {
+		writeError(w, http.StatusBadRequest, "new password must be different from current password")
+		return
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), 12)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update password")
+		return
+	}
+	if err := a.store.UpdateAdminPasswordHashAndClearMustChange(username, string(newHash)); err != nil {
+		if err == sql.ErrNoRows {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := a.store.DeleteAdminSessionsByUsername(username); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	token, tokenHash, err := randomToken(32)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create session")
+		return
+	}
+	expiresAt := time.Now().Add(a.adminSessionTTL).Unix()
+	if err := a.store.UpsertAdminSession(tokenHash, username, expiresAt); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, adminLoginResponse{Token: token, ExpiresAt: expiresAt, MustChangePassword: false})
 }
 
 func (a *API) listNodes(w http.ResponseWriter, _ *http.Request) {
@@ -405,7 +496,7 @@ func (a *API) listAlertEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, events)
 }
 
-func (a *API) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+func (a *API) requireAdminSession(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
 		if token == "" {
@@ -415,17 +506,85 @@ func (a *API) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 		tokenHash := sha256Hex(token)
 		now := time.Now().Unix()
 		_ = a.store.DeleteExpiredAdminSessions(now)
-		_, expiresAt, err := a.store.GetAdminSession(tokenHash)
+		username, expiresAt, err := a.store.GetAdminSession(tokenHash)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		if expiresAt == 0 || expiresAt <= now {
+		if username == "" || expiresAt == 0 || expiresAt <= now {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		next(w, r)
+		next(w, r.WithContext(context.WithValue(r.Context(), adminUsernameContextKey, username)))
 	}
+}
+
+func (a *API) requireAdminBusiness(next http.HandlerFunc) http.HandlerFunc {
+	return a.requireAdminSession(func(w http.ResponseWriter, r *http.Request) {
+		username := adminUsernameFromContext(r.Context())
+		mustChange, err := a.store.GetAdminMustChangePassword(username)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				writeError(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if mustChange {
+			writeJSON(w, http.StatusForbidden, map[string]any{
+				"error": "password change required",
+				"code":  "PASSWORD_CHANGE_REQUIRED",
+			})
+			return
+		}
+		next(w, r)
+	})
+}
+
+func adminUsernameFromContext(ctx context.Context) string {
+	username, _ := ctx.Value(adminUsernameContextKey).(string)
+	return username
+}
+
+func validateNewPassword(password string) error {
+	length := len([]rune(password))
+	if length < 8 || length > 72 {
+		return fmt.Errorf("new password must be 8-72 characters")
+	}
+	if strings.EqualFold(password, "admin") {
+		return fmt.Errorf("new password cannot be admin")
+	}
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, r := range password {
+		switch {
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsDigit(r):
+			hasDigit = true
+		default:
+			hasSpecial = true
+		}
+	}
+	kinds := 0
+	if hasUpper {
+		kinds++
+	}
+	if hasLower {
+		kinds++
+	}
+	if hasDigit {
+		kinds++
+	}
+	if hasSpecial {
+		kinds++
+	}
+	if kinds < 3 {
+		return fmt.Errorf("new password must include at least 3 character types")
+	}
+	return nil
 }
 
 func bearerToken(r *http.Request) string {
