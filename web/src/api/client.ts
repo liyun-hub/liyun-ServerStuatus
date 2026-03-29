@@ -1,139 +1,58 @@
-import type {
-  AlertEvent,
-  AlertRule,
-  MetricsSnapshot,
-  NodeSummary,
-  AdminLoginResponse,
-  AdminNodeItem,
-  CreateNodeRequest,
-  CreateNodeResponse,
-  InstallCommandResponse,
-  UpdateNodeDisplayNameRequest,
-  ResetNodeTokenResponse,
-} from "../types";
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { useAuthStore } from '../store/auth';
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8080";
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
-const ADMIN_TOKEN_KEY = "admin_token";
-const ADMIN_MUST_CHANGE_KEY = "admin_must_change_password";
+export const apiClient = axios.create({
+  baseURL: API_BASE,
+  timeout: 10000,
+});
 
-function getAdminToken() {
-  return localStorage.getItem(ADMIN_TOKEN_KEY) ?? "";
-}
+// Retry logic for GET requests
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [1000, 2000, 4000];
 
-function setAdminToken(token: string) {
-  localStorage.setItem(ADMIN_TOKEN_KEY, token);
-}
-
-function clearAdminToken() {
-  localStorage.removeItem(ADMIN_TOKEN_KEY);
-}
-
-function getAdminMustChangePassword() {
-  return localStorage.getItem(ADMIN_MUST_CHANGE_KEY) === "1";
-}
-
-function setAdminMustChangePassword(value: boolean) {
-  localStorage.setItem(ADMIN_MUST_CHANGE_KEY, value ? "1" : "0");
-}
-
-function clearAdminMustChangePassword() {
-  localStorage.removeItem(ADMIN_MUST_CHANGE_KEY);
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers ?? { "Content-Type": "application/json" });
-  if (!headers.has("Content-Type") && init?.body) {
-    headers.set("Content-Type", "application/json");
+apiClient.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
+  return config;
+});
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
-  }
-
-  const text = await response.text();
-  return (text ? JSON.parse(text) : {}) as T;
-}
-
-async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getAdminToken();
-  if (!token) {
-    throw new Error("未登录");
-  }
-
-  const headers = new Headers(init?.headers ?? { "Content-Type": "application/json" });
-  headers.set("Authorization", `Bearer ${token}`);
-  if (!headers.has("Content-Type") && init?.body) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  try {
-    return await request<T>(path, { ...init, headers });
-  } catch (error) {
-    const message = (error as Error).message;
-    if (message.includes("unauthorized") || message.includes("401")) {
-      clearAdminToken();
-      clearAdminMustChangePassword();
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retryCount?: number };
+    
+    // Auth errors
+    if (error.response?.status === 401) {
+      useAuthStore.getState().logout();
+      window.location.href = '/admin/login';
+      return Promise.reject(error);
     }
-    throw error;
+
+    if (error.response?.status === 403) {
+      const data = error.response.data as any;
+      if (data?.code === 'PASSWORD_CHANGE_REQUIRED') {
+        window.location.href = '/admin/change-password';
+        return Promise.reject(error);
+      }
+    }
+
+    // Retry logic for GET requests
+    if (originalRequest.method?.toLowerCase() === 'get') {
+      originalRequest._retryCount = originalRequest._retryCount || 0;
+      
+      if (originalRequest._retryCount < MAX_RETRIES) {
+        const delay = RETRY_DELAYS[originalRequest._retryCount] || 4000;
+        originalRequest._retryCount += 1;
+        
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return apiClient(originalRequest);
+      }
+    }
+
+    return Promise.reject(error);
   }
-}
-
-export const auth = {
-  tokenKey: ADMIN_TOKEN_KEY,
-  getToken: getAdminToken,
-  setToken: setAdminToken,
-  clearToken: () => {
-    clearAdminToken();
-    clearAdminMustChangePassword();
-  },
-  isLoggedIn: () => !!getAdminToken(),
-  mustChangePassword: getAdminMustChangePassword,
-  setMustChangePassword: setAdminMustChangePassword,
-};
-
-export const api = {
-  listNodes: () => request<NodeSummary[]>("/api/nodes"),
-  getNode: (id: string) => request<NodeSummary>(`/api/nodes/${id}`),
-  getNodeHistory: (id: string, from: number, to: number, limit = 1000) =>
-    request<MetricsSnapshot[]>(`/api/nodes/${id}/history?from=${from}&to=${to}&limit=${limit}`),
-
-  listAlertRules: () => request<AlertRule[]>("/api/alert-rules"),
-  listAlertEvents: () => request<AlertEvent[]>("/api/alert-events"),
-
-  adminLogin: (username: string, password: string) =>
-    request<AdminLoginResponse>("/api/admin/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
-    }),
-  adminLogout: () => adminRequest<{ ok: boolean }>("/api/admin/logout", { method: "POST" }),
-  adminChangePassword: (currentPassword: string, newPassword: string) =>
-    adminRequest<AdminLoginResponse>("/api/admin/change-password", {
-      method: "POST",
-      body: JSON.stringify({ currentPassword, newPassword }),
-    }),
-  adminListNodes: () => adminRequest<AdminNodeItem[]>("/api/admin/nodes"),
-  adminCreateNode: (payload: CreateNodeRequest) =>
-    adminRequest<CreateNodeResponse>("/api/admin/nodes", { method: "POST", body: JSON.stringify(payload) }),
-  adminUpdateNodeDisplayName: (nodeId: string, payload: UpdateNodeDisplayNameRequest) =>
-    adminRequest<{ nodeId: string; displayName: string }>(`/api/admin/nodes/${nodeId}/display-name`, {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    }),
-  adminResetNodeToken: (nodeId: string) =>
-    adminRequest<ResetNodeTokenResponse>(`/api/admin/nodes/${nodeId}/token/reset`, { method: "POST" }),
-  adminInstallCommand: (nodeId: string) =>
-    adminRequest<InstallCommandResponse>(`/api/admin/nodes/${nodeId}/install-command`, { method: "POST" }),
-  adminListAlertRules: () => adminRequest<AlertRule[]>("/api/alert-rules"),
-  adminCreateAlertRule: (payload: Omit<AlertRule, "id" | "createdAt" | "updatedAt">) =>
-    adminRequest<AlertRule>("/api/alert-rules", { method: "POST", body: JSON.stringify(payload) }),
-  adminUpdateAlertRule: (id: number, payload: Omit<AlertRule, "id" | "createdAt" | "updatedAt">) =>
-    adminRequest<AlertRule>(`/api/alert-rules/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-};
-
+);
