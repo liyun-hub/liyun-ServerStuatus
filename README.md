@@ -16,6 +16,10 @@
 - [发布打包](#发布打包)
 - [常见问题排查](#常见问题排查)
 - [文档索引](#文档索引)
+  - [项目总入口](#项目总入口)
+  - [新版 Web 文档（当前主线）](#新版-web-文档当前主线)
+  - [旧版 Web 文档（历史归档）](#旧版-web-文档历史归档)
+  - [历史文档兼容入口](#历史文档兼容入口)
 
 ---
 
@@ -39,8 +43,10 @@
 server-status/
 ├─ server/                 # Go 服务端（HTTP API + Agent WebSocket + SQLite）
 ├─ agent/                  # Go 探针（采集并上报系统指标）
-├─ web/                    # React 管理端
-├─ docs/                   # 接入与使用文档
+├─ web/                    # 新版前端（当前维护主线）
+├─ web-old/                # 旧版前端（历史归档）
+├─ doc/                    # 项目与 Web 分层文档（web-new / web-old）
+├─ docs/                   # 历史单体文档（兼容保留）
 ├─ docker-compose.yml      # 一键部署编排
 ├─ .env.example            # 环境变量模板
 ├─ build-release.sh        # 一键打包脚本
@@ -153,7 +159,7 @@ Authorization: Bearer <admin-session-token>
 
 ### 后台认证
 
-- `POST /api/admin/login`
+- `POST /api/admin/login`（请求体包含 `username` + `password`）
 - `POST /api/admin/logout`
 - `POST /api/admin/change-password`
 
@@ -292,4 +298,26 @@ sh build-release.sh v1.0.0
 
 ## 文档索引
 
-- 前端 API 完整接入指南：[`docs/web.md`](docs/web.md)
+### 项目总入口
+
+- 文档总览：[`doc/项目文档.md`](doc/项目文档.md)
+
+### 新版 Web 文档（当前主线）
+
+- 入口：[`doc/web-new/README.md`](doc/web-new/README.md)
+- 模块划分：[`doc/web-new/MODULES.md`](doc/web-new/MODULES.md)
+- 目录结构：[`doc/web-new/STRUCTURE.md`](doc/web-new/STRUCTURE.md)
+- API 与鉴权：[`doc/web-new/API_AUTH.md`](doc/web-new/API_AUTH.md)
+- 开发与运行：[`doc/web-new/DEVELOPMENT.md`](doc/web-new/DEVELOPMENT.md)
+
+### 旧版 Web 文档（历史归档）
+
+- 入口：[`doc/web-old/README.md`](doc/web-old/README.md)
+- 模块划分：[`doc/web-old/MODULES.md`](doc/web-old/MODULES.md)
+- 目录结构：[`doc/web-old/STRUCTURE.md`](doc/web-old/STRUCTURE.md)
+- API 与鉴权：[`doc/web-old/API_AUTH.md`](doc/web-old/API_AUTH.md)
+- 开发与运行：[`doc/web-old/DEVELOPMENT.md`](doc/web-old/DEVELOPMENT.md)
+
+### 历史文档兼容入口
+
+- 旧版单体接入文档：[`docs/web.md`](docs/web.md)
