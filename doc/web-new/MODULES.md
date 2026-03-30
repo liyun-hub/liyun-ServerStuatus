@@ -1,5 +1,10 @@
 # 新版 Web 模块划分（web）
 
+> 状态：**当前维护主线**
+> 返回入口：[`README.md`](./README.md)
+
+本文只描述当前 Web 的页面、路由、布局、状态与数据访问职责。
+
 ## 1. 路由与页面
 
 | 路由 | 页面文件 | 类型 | 说明 |
@@ -7,8 +12,8 @@
 | `/` | `src/pages/Home.tsx` | 公共 | 节点总览，15s 轮询 |
 | `/nodes/:id` | `src/pages/NodeDetail.tsx` | 公共 | 节点详情与性能历史，15s 轮询 |
 | `/alerts` | `src/pages/Alerts.tsx` | 公共 | 告警规则 + 告警事件，30s 轮询 |
-| `/admin/login` | `src/pages/admin/Login.tsx` | 管理 | 管理登录（仅密码） |
-| `/admin/change-password` | `src/pages/admin/ChangePassword.tsx` | 管理 | 首登/策略触发后的强制改密 |
+| `/admin/login` | `src/pages/admin/Login.tsx` | 管理 | 管理登录入口 |
+| `/admin/change-password` | `src/pages/admin/ChangePassword.tsx` | 管理 | 首登或策略触发后的强制改密 |
 | `/admin/nodes` | `src/pages/admin/NodeManagement.tsx` | 管理 | 节点增改、token 重置、安装命令 |
 
 ## 2. 访问控制
@@ -16,8 +21,10 @@
 路由守卫定义于 `src/App.tsx`，通过 `ProtectedRoute` 支持三类约束：
 
 - `requireAuth`：需要已登录
-- `requireNoAuth`：未登录访问（已登录会重定向）
-- `requireChangePassword`：仅允许必须改密状态访问
+- `requireNoAuth`：仅未登录可访问
+- `requireChangePassword`：仅必须改密状态可访问
+
+具体 token 存储、401/403 处理与重试规则见 [`API_AUTH.md`](./API_AUTH.md)。
 
 ## 3. 布局与导航
 
@@ -35,4 +42,4 @@
 
 - 请求客户端：`src/api/client.ts`
 - 业务 API 聚合：`src/api/index.ts`
-- 401/403 鉴权处理、GET 自动重试由 `client.ts` 统一处理
+- 401 / 403 鉴权处理与 GET 自动重试由 `client.ts` 统一处理

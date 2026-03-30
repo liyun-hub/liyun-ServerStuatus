@@ -1,5 +1,10 @@
 # 新版 Web 开发与运行（web）
 
+> 状态：**当前维护主线**
+> 返回入口：[`README.md`](./README.md)
+
+本文只记录当前 Web 的本地开发、构建、运行与容器化现状。
+
 ## 1. 环境要求
 
 - Node.js 18+
@@ -40,7 +45,7 @@ npm run preview
 VITE_API_BASE=http://localhost:8080 npm run dev
 ```
 
-## 5. 与后端联调要点
+## 5. 联调要点
 
 1. 管理登录成功后会保存 `admin_token`。
 2. 当后端返回 `PASSWORD_CHANGE_REQUIRED` 时，前端会跳转至 `/admin/change-password`。
@@ -49,8 +54,10 @@ VITE_API_BASE=http://localhost:8080 npm run dev
    - NodeDetail：15s
    - Alerts：30s
 
-## 6. 容器化说明（当前仓库状态）
+更具体的接口与会话行为见 [`API_AUTH.md`](./API_AUTH.md)。
 
-- 根目录 `docker-compose.yml` 已配置 `web` 服务（构建上下文 `./web`）。
-- 但当前 `web/` 目录未包含 `Dockerfile`（旧版 `web-old/Dockerfile` 存在）。
-- 如需使用当前 compose 直接构建新版 web，请先补齐 `web/Dockerfile` 或调整 compose 配置。
+## 6. 容器化现状
+
+- 根目录 `docker-compose.yml` 已配置 `web` 服务，构建上下文为 `./web`。
+- 当前主仓库中如未提供 `web/Dockerfile`，则不能直接按现有 compose 构建新版 Web 镜像。
+- 需要直接构建新版 Web 容器时，应先补齐 `web/Dockerfile` 或调整 compose 配置。

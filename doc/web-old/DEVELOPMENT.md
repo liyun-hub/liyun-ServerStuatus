@@ -1,5 +1,10 @@
 # 旧版 Web 开发与运行（web-old）
 
+> 状态：**历史归档，仅供参考**
+> 返回入口：[`README.md`](./README.md)
+
+本文仅记录旧版 `web-old/` 的历史开发与构建方式，不作为当前主线操作说明。
+
 ## 1. 环境要求
 
 - Node.js 18+
@@ -39,9 +44,7 @@ npm run preview
 
 ## 5. 容器化
 
-旧版目录包含 `Dockerfile`，可单独构建镜像。
-
-示例：
+旧版目录包含 `Dockerfile`，可单独构建镜像：
 
 ```bash
 cd web-old
@@ -50,5 +53,6 @@ docker build -t server-status-web-old .
 
 ## 6. 使用边界
 
-- 旧版文档仅用于历史回溯和差异对照。
-- 当前项目的日常开发、联调、发布应以 `web/` 与 `doc/web-new/*` 为准。
+- 旧版文档仅用于历史回溯、差异对照与问题排查
+- 当前项目的开发、联调、发布应以 `web/` 与 `doc/web-new/*` 为准
+- 当前主线说明请改看 [`../web-new/DEVELOPMENT.md`](../web-new/DEVELOPMENT.md)

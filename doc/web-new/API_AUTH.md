@@ -1,5 +1,10 @@
 # 新版 Web API 与鉴权（web）
 
+> 状态：**当前维护主线**
+> 返回入口：[`README.md`](./README.md)
+
+本文只记录当前 Web 接入后端时需要关注的 API、会话、拦截器与重试规则。
+
 ## 1. API 基础配置
 
 - 文件：`src/api/client.ts`
@@ -19,7 +24,7 @@
 
 ### 3.1 请求拦截
 
-- 若存在 `admin_token`，自动附加：
+若存在 `admin_token`，自动附加：
 
 ```http
 Authorization: Bearer <token>
@@ -30,7 +35,7 @@ Authorization: Bearer <token>
 - `401`：清理登录态并跳转 `/admin/login`
 - `403` 且 `code=PASSWORD_CHANGE_REQUIRED`：跳转 `/admin/change-password`
 
-### 3.3 GET 重试
+### 3.3 GET 自动重试
 
 - 仅对 GET 请求生效
 - 最多重试 3 次
@@ -60,7 +65,8 @@ Authorization: Bearer <token>
 - `POST /api/alert-rules`
 - `PUT /api/alert-rules/:id`
 
-## 5. 新版与旧版差异（鉴权层）
+## 5. 当前 Web 侧重点
 
-- 新版：axios + 统一拦截器 + 自动重试
-- 旧版：fetch 封装（`web-old/src/api/client.ts`）
+- 当前文档只覆盖前端接入所需的接口分组与鉴权行为。
+- 更上层的仓库导航与文档分层说明见 [`../项目文档.md`](../项目文档.md)。
+- 本地开发、构建与容器化现状见 [`DEVELOPMENT.md`](./DEVELOPMENT.md)。
